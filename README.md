@@ -1,4 +1,4 @@
-# mpv-shader-suite
+# mpv-perceptual-shaders
 
 Eight GLSL shaders for mpv targeting common streaming artifacts: banding, chroma blur, upscaling
 ringing, and flat-detail loss. SDR (BT.709) and HDR (ST.2084/PQ) variants for each stage.
@@ -6,7 +6,7 @@ ringing, and flat-detail loss. SDR (BT.709) and HDR (ST.2084/PQ) variants for ea
 ## Shaders
 
 | File | Hook | What it does |
-|------|------|--------------|
+|---|---|---|
 | `deband-sdr.glsl` | LUMA, CHROMA | Weber-Fechner adaptive debanding with IGN dithering, BT.709 |
 | `deband-hdr.glsl` | LUMA, CHROMA | Same algorithm; threshold computed via full PQ EOTF in linear light |
 | `chroma-reconstruct.glsl` | CHROMA | Bilateral chroma upsampling guided by full-resolution luma; KrigBilateral available |
@@ -21,7 +21,7 @@ ringing, and flat-detail loss. SDR (BT.709) and HDR (ST.2084/PQ) variants for ea
 - mpv v0.39+
 - libplacebo v7.x (needed for `//!PARAM` live switching)
 - `vo=gpu-next` in `mpv.conf`
-- Vulkan recommended. D3D11 runs 2-3x slower for this workload (~1.6ms total at HDR 4K, Balanced).
+- Vulkan recommended, D3D11 is noticeably slower for this workload
 
 ## Install
 
@@ -31,7 +31,6 @@ Copy `.glsl` files to your mpv shaders directory:
 - Linux / macOS: `~/.config/mpv/shaders/`
 
 Add to `mpv.conf`:
-
 ```ini
 [sdr-streaming]
 glsl-shaders="~~/shaders/deband-sdr.glsl:~~/shaders/chroma-reconstruct.glsl:~~/shaders/antiring.glsl:~~/shaders/adaptive-sharpen-sdr.glsl:~~/shaders/grain-sdr.glsl"
@@ -42,10 +41,11 @@ glsl-shaders="~~/shaders/deband-hdr.glsl:~~/shaders/chroma-reconstruct.glsl:~~/s
 glsl-shader-opts=quality_level=1
 ```
 
-## Pipeline order
+Or use the included `mpv.conf` directly - it has auto-switching profiles based on video gamma metadata.
 
+## Pipeline order
 ```
-deband -> chroma-reconstruct -> antiring -> adaptive-sharpen -> grain
+deband → chroma-reconstruct → antiring → adaptive-sharpen → grain
 ```
 
 Deband runs at native source resolution (4:2:0 chroma at half res). Chroma-reconstruct uses
@@ -54,13 +54,35 @@ or the sharpener amplifies surviving ringing. Grain runs at OUTPUT after all sca
 
 ## Quality levels
 
-All shaders share one `quality_level` param. Set it once via `glsl-shader-opts=quality_level=N`.
+All shaders share one `quality_level` param. Set it once via `glsl-shader-opts=quality_level=N`,
+or press F4 / F5 / F6 to switch live (requires `input.conf`).
 
 | Level | Deband | Chroma | Antiring | Sharpen | Grain |
-|-------|--------|--------|----------|---------|-------|
+|---|---|---|---|---|---|
 | 0 Fast | 2 samples, r=6px, luma only | HW bilinear passthrough | Passthrough | Passthrough | Pure IGN |
 | 1 Balanced | 8 samples, r=16px, full chroma | 4x4 Gaussian bilateral | 3x3 (8 taps) | 3x3 unsharp | Pure IGN |
 | 2 Quality | 16 samples, r=22px, golden-angle spiral | 4x4 tighter sigmas | 5x5 (24 taps) | 5x5 two-scale Laplacian | Spatially correlated IGN |
 
-Each shader has `#define` constants at the top for per-parameter tuning. Defaults target typical
-streaming content.
+Each shader has `#define` constants at the top if you want to tune individual parameters.
+Defaults are calibrated for typical(H.264/HEVC) streaming encodes.
+
+## Known behavior worth knowing
+
+**Sharpening does nothing on motion blur.** The sharpener reads local gradient, blurred frames
+look flat to it and get skipped. That's intentional, not a bug.
+
+**Sharpening looks weak in dark scenes.** If the overall image is dim and nothing in frame is
+brightly lit, the JND threshold scales down and sharpening backs off. Dark content has
+less visible detail to sharpen.
+
+**Grain looks strong at first.** It's weighted heavier in darks by design, since that's where banding
+is worst and grain earns its keep. If it's too much, drop `GRAIN_DARK_BOOST` in `grain-sdr.glsl`
+(default 2.0).
+
+**quality=0 chroma falls back to hardware bilinear.** Fine for most content. You'll see a
+difference on saturated fine detail such as red text, cartoon outlines and anything with sharp
+color transitions at chroma resolution.
+
+**Clean source won't show much debanding.** The deband threshold is tuned for streaming
+artifacts. Lossless or low-compression source with no banding will just pick up the
+grain pass. That's correct behavior.
