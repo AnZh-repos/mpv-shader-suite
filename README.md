@@ -1,4 +1,4 @@
-# mpv-perceptual-shaders
+# mpv-shader-suite
 
 Eight GLSL shaders for mpv targeting common streaming artifacts: banding, chroma blur, upscaling
 ringing, and flat-detail loss. SDR (BT.709) and HDR (ST.2084/PQ) variants for each stage.
