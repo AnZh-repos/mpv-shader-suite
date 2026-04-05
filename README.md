@@ -2,6 +2,12 @@
 
 Eight GLSL shaders for mpv targeting common streaming artifacts: banding, chroma blur, upscaling
 ringing, and flat-detail loss. SDR (BT.709) and HDR (ST.2084/PQ) variants for each stage.
+<table>
+  <tr>
+    <td><img src="screenshots/1-off.png"/></td>
+    <td><img src="screenshots/1-on.png"/></td>
+  </tr>
+</table>
 
 ## Shaders
 
